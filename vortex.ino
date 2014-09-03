@@ -45,8 +45,6 @@ CRGB leds[NUM_LEDS];
 //获取电池电量：
 #define GET_ENERGY 101
 
-
-
 //小车返回宏定义
 #define CRASH_HIGH 1 			//碰撞传感器高
 #define CRASH_LOW 2				//碰撞传感器低
@@ -66,37 +64,177 @@ CRGB leds[NUM_LEDS];
 #define STATE_RIGHT  34			//运动状态 右转
 #define STATE_STOP 35			//运动状态 停止
 
-Metro Cmd=Metro(20);//接收线程
-Metro Speed=Metro(200);//加速度线程
-Metro Led=Metro(20);//加速度线程
+
+
+
+
+
+Metro Cmd=Metro(20);			//接收线程
+Metro Speed=Metro(5000);		//加速度线程
+Metro Led=Metro(20);			//加速度线程
+
 //电机引脚
-#define ENL 6     //左侧电机使能引脚pwm量
-#define DIRL 7     //左侧电机方向引脚
-#define ENR 5     //右侧电机使能引脚
-#define DIRR 4     //右侧电机方向引脚
+#define ENL 5     				//左侧电机使能引脚pwm量
+#define DIRL 12     			//左侧电机方向引脚
+#define ENR 6    				//右侧电机使能引脚
+#define DIRR 7//4   			//右侧电机方向引脚
 //传感器位置宏定义  5个红外传感器
 #define MID A2
 #define LEFT1 A1
 #define LEFT2 A0
 #define RIGHT1 A3
-#define RIGHT2 A7
-#define LIR 9
-#define RIR 10
+#define RIGHT2 A4				//7
+#define LIR 13					//9
+#define RIR 8					//10
+#define IR_IN  17				//IR receiver pin
 //串口位置
 #define tx 11
 #define rx 2
-SoftwareSerial mySerial(rx, tx);	// RX, TX
+SoftwareSerial mySerial(rx, tx);// RX, TX
 //变量
-int irCount=0;//接近传感器
-int blackVal=300;//黑色阈值
+int irCount=0;					//接近传感器
 
 
-//引脚初始化
+//闭环电机控制
+//获取脉冲间隔
+static unsigned long leftTime=micros(),leftTime_1;
+void lSpeed()
+{	
+        static int numl=0;
+        numl++;
+        if(numl==2)
+        {
+      	  leftTime_1=micros()-leftTime;
+          leftTime=micros();
+          numl=0;
+        }
+	
+}
+double readLeftTime()
+{
+	static double readL;
+	readL=micros()-leftTime;
+	if(readL<leftTime_1)
+	{
+		return leftTime_1;
+	}
+	else{
+		return readL;
+	}
+}
+//PID控制
+void moveLeft(double hopeTime)//左轮PID控制，参数为40000-20000us,脉冲间隔
+{
+	static double movel_i_scope=10000,
+				 movel_i_scope_1=5,
+				 movel_i=3000,
+				 movel_p=1000,
+				 movel_p_scope=40;
+	static double enL;
+	long pow;
+		
+	if(abs(readLeftTime()-hopeTime)>movel_i_scope)
+		enL=enL+movel_i_scope_1*(readLeftTime()-hopeTime)/abs(readLeftTime()-hopeTime);
+	else
+		enL=enL+(readLeftTime()-hopeTime)/movel_i;
+		
+	digitalWrite(DIRL,LOW);
+	
+	if(enL>=255)
+		enL=255;
+	else if(enL<=0)
+		enL=0;
+		
+	if(abs((readLeftTime()-hopeTime)/movel_p)>=movel_p_scope)
+		pow=enL+movel_p_scope*((readLeftTime()-hopeTime)/abs(readLeftTime()-hopeTime));
+	else
+		pow=enL+(readLeftTime()-hopeTime)/movel_p;
+	if(pow>=255)
+		pow=255;
+	else if(pow<=0)
+		pow=0;  
+	else 
+		analogWrite(ENL,pow);
+}
+//闭环电机控制
+//获取脉冲间隔
+static unsigned long rightTime=micros(),rightTime_1;
+void rSpeed()
+{	
+        static int numr=0;
+        numr++;
+        if(numr==2)
+        {
+      	  rightTime_1=micros()-rightTime;
+          rightTime=micros();
+          numr=0;
+        }
+}
+double readRightTime()
+{
+	static double readR;
+	readR=micros()-rightTime;
+	if(readR<rightTime_1)
+	{
+		return rightTime_1;
+	}
+	else{
+		return readR;
+	}
+}
+//PID控制
+void moveRight(double hopeTime)//右轮PID控制，参数为40000-20000us,脉冲间隔
+{
+	static double mover_i_scope=10000,
+				 mover_i_scope_1=5,
+				 mover_i=3000,
+				 mover_p=1000,
+				 mover_p_scope=40;
+	static double enR;
+	long pow;
+		
+	if(abs(readRightTime()-hopeTime)>mover_i_scope)
+		enR=enR+mover_i_scope_1*(readRightTime()-hopeTime)/abs(readRightTime()-hopeTime);
+	else
+		enR=enR+(readRightTime()-hopeTime)/mover_i;
+		
+	digitalWrite(DIRR,LOW);
+	
+	if(enR>=255)
+		enR=255;
+	else if(enR<=0)
+		enR=0;
+		
+	if(abs((readRightTime()-hopeTime)/mover_p)>=mover_p_scope)
+		pow=enR+mover_p_scope*((readRightTime()-hopeTime)/abs(readRightTime()-hopeTime));
+	else
+		pow=enR+(readRightTime()-hopeTime)/mover_p;
+	if(pow>=255)
+		pow=255;
+	else if(pow<=0)
+		pow=0;  
+	else 
+		analogWrite(ENR,pow);
+}
 
-void update() //PB0引脚变化中断
+
+
+
+
+
+
+
+
+//PB0引脚变化中断
+/*
+void update() 
 {
 	irCount++;
+	Serial.println("1");
 }
+*/
+
+//引脚初始化
 void pinInit()
 {	
 	mySerial.begin (9600);
@@ -107,10 +245,15 @@ void pinInit()
 	pinMode(DIRL,OUTPUT);
 	pinMode(LIR,OUTPUT);//接近传感器灯
 	pinMode(RIR,OUTPUT);
-	//PCICR=0x01;//开中断
-	//PCMSK0=0x01;   	
-        delay(100);
-	attachInterrupt(0,update,HIGH);//开中断	
+	pinMode(IR_IN,INPUT);//init the ir receiver pin
+	digitalWrite(LIR,HIGH);
+	digitalWrite(RIR,HIGH);
+	PCICR=0x01;//开中断
+	PCMSK0=0x01;   	
+	delay(100);
+	//attachInterrupt(0,update,CHANGE);//开中断	
+	attachInterrupt(2,rSpeed,HIGH);//开编码器中断	
+	attachInterrupt(3,lSpeed,HIGH);//开编码器中断	
 }
 
 //串口接收
@@ -199,147 +342,212 @@ void Command()
     }
 }
 
-//速度计算输出
-void Move(int lspeed,int rspeed,int acc)
+
+//加速度计算，输入时间0-255*10，speed为八档左右轮速度，第八位第四位方向
+float reallspeed=0,realrspeed=0;//实际速度
+float g_lacc,g_racc;//加速度传递变量
+void accCount(uint8_t speed,int acctime)
 {
-	static int reallspeed=0,realrspeed=0;
-	if(acc==0)
+
+	int lspeed,rspeed;
+	lspeed=((speed&0x70)>>4)*36;
+	if(!(speed&0x80))
+		lspeed*=-1;
+	rspeed=(speed&0x07)*36;
+	if(!(speed&0x08))
+		rspeed*=-1;	
+	if(acctime<=0)
 	{
-		reallspeed=lspeed;
-		realrspeed=rspeed;
+		g_lacc=0;
+		g_racc=0;
 	}
 	else
 	{
+		g_lacc=abs(float((lspeed-reallspeed)*2)/float(acctime));
+		g_racc=abs(float((rspeed-realrspeed)*2)/float(acctime));
+	}
+}
+//速度计算输出
+void Move(uint8_t speed,float lacc,float racc)
+{	
+	int lspeed,rspeed;
+	lspeed=((speed&0x70)>>4)*36;
+	if(!(speed&0x80))
+		lspeed*=-1;
+	rspeed=(speed&0x07)*36;
+	if(!(speed&0x08))
+		rspeed*=-1;
+	if(lacc==0)
+	{
+		reallspeed=lspeed;
+	}
+	else
+	{                       
 		if(lspeed>reallspeed)
 		{
-			reallspeed=reallspeed+acc;
+			reallspeed=reallspeed+lacc;
 			if(lspeed<reallspeed)
 			reallspeed=lspeed;
 		}
 		if(lspeed<reallspeed)
 		{
-			reallspeed=reallspeed-acc;
+			reallspeed=reallspeed-lacc;
 			if(lspeed>reallspeed)
 			reallspeed=lspeed;
 		}
-		if(rspeed>realrspeed)
+
+	}
+        if(racc==0)
+        {
+            realrspeed=rspeed;
+        }
+        else
+        {
+          	if(rspeed>realrspeed)
 		{
-			realrspeed=realrspeed+acc;
+			realrspeed=realrspeed+racc;
 			if(rspeed<realrspeed)
 			realrspeed=rspeed;
 		}
 		if(rspeed<realrspeed)
 		{
-			realrspeed=realrspeed-acc;
+			realrspeed=realrspeed-racc;
 			if(rspeed>realrspeed)
 			realrspeed=rspeed;
 		}
-	}
+        }
 	if(reallspeed>=0)
 	{
-		digitalWrite(DIRL,HIGH);
+		digitalWrite(DIRL,LOW);
 		analogWrite(ENL,abs(reallspeed));
 
 	}
 	else
 	{
-		digitalWrite(DIRL,LOW);
+		digitalWrite(DIRL,HIGH);
 		analogWrite(ENL,abs(reallspeed));
 	}
 	if(realrspeed>=0)
 	{
-		digitalWrite(DIRR,HIGH);
+		digitalWrite(DIRR,LOW);
 		analogWrite(ENR,abs(realrspeed));
 
 	}
 	else
 	{
-		digitalWrite(DIRR,LOW);
+		digitalWrite(DIRR,HIGH);
+
 		analogWrite(ENR,abs(realrspeed));
 	}	
 }
-//LED控制
-void LED(uint8_t form,uint8_t color,uint8_t ledacc)
+//灯带加速度变换
+float realled[8][2],ledacc[8][2];
+void ledAccCount(uint8_t date,uint8_t lignt_color,uint8_t time)
 {
-	static int ledlight[8];
-	static int ledcolor=0;
-	
-	if((ledacc==0)||(ledcolor==color))
+	uint8_t light,color;
+	light=(lignt_color>>4)*17;
+	color=(lignt_color&0x0f)*17;
+	for(int j=0;j<8;j++)
 	{
-		ledcolor=color;
-	}
-	else//颜色平滑
-	{
-		if(color>ledcolor)
+		if(date&(1<<j))
 		{
-			if(color-ledcolor<128)
-			{
-				ledcolor+=ledacc;
-				if(ledcolor>color)
-					ledcolor=color;
-			}
+			if(time==0)
+				ledacc[j][0]=0;
+			else
+				ledacc[j][0]=abs(float(light-realled[j][0]))*2/float(time);
+			
+		}
+	}
+	for(int j=0;j<8;j++)
+	{
+		if(date&(1<<j))
+			if(time==0)
+				ledacc[j][1]=0;
 			else
 			{
-				ledcolor-=ledacc;
-				if(ledcolor<=0)
-				{
-					ledcolor=255+ledcolor;
-					if(ledcolor<color)
-					{
-						ledcolor=color;
-					}
-				}
-			}
-		}
-		else
-		{
-			if(ledcolor-color<128)
-			{
-				ledcolor-=ledacc;
-				if(ledcolor<color)
-					ledcolor=color;
-			}
-			else
-			{
-				ledcolor+=ledacc;
-				if(ledcolor>=255)
-				{
-					ledcolor=ledcolor-255;
-					if(ledcolor>color)
-					{
-						ledcolor=color;
-					}
-				}
-			}
-		}
-
-		
+				if (abs(color-realled[j][1])<127)
+					ledacc[j][1]=abs(float(color-realled[j][1]))*2/float(time);
+				else 
+					ledacc[j][1]=(255-abs(float(color-realled[j][1])))*2/float(time);
+			}	
 	}
-	for(int i=0;i<8;i++)//亮度平滑
-	{
-		if(form&(1<<i))
-		{	
-			if(ledlight[i]<255)
-			{	
-				ledlight[i]+=ledacc;				
-				if((ledlight[i]>255)||(ledacc==0))
-				ledlight[i]=255;
-			}
-		}
-		else
-		{	
-			if(ledlight[i]>0)
-			{
-				ledlight[i]-=ledacc;
-				if((ledlight[i]<0)||(ledacc==0))
-				ledlight[i]=0;	
-			}			
-		}
-		leds[i]=CHSV(ledcolor,255,ledlight[i]);  
-	}
-    FastLED.show(); 
 }
-
+void ledAction(uint8_t date,uint8_t lignt_color)
+{
+	uint8_t light,color;
+	light=(lignt_color>>4)*17;
+	color=(lignt_color&0x0f)*17;
+	for(int i=0;i<8;i++)
+	{
+		if(date&(1<<i))
+		{
+			if(ledacc[i][0]==0)
+				realled[i][0]=light;
+			else//亮度平滑
+			{
+				if(realled[i][0]<light)
+				{
+					realled[i][0]+=ledacc[i][0];
+					if(realled[i][0]>light)
+						realled[i][0]=light;
+				}
+				if(realled[i][0]>light)
+				{
+					realled[i][0]-=ledacc[i][0];
+					if(realled[i][0]<light)
+						realled[i][0]=light;
+				}
+			}
+			if(ledacc[i][1]==0)
+				realled[i][1]=color;
+			else//颜色平滑
+			{
+				if(realled[i][1]<color)
+					if(color-realled[i][1]<127)
+					{
+						realled[i][1]+=ledacc[i][1];
+						if(realled[i][1]>color)
+							realled[i][1]=color;
+					}
+					else
+					{
+						realled[i][1]-=ledacc[i][1];
+						if(realled[i][1]<=0)
+						{
+							realled[i][1]=255+realled[i][1];
+							if(realled[i][1]<color)
+								realled[i][1]=color;							
+						}
+					}
+				else if(realled[i][1]>color)
+					if(realled[i][1]-color<127)
+					{
+						realled[i][1]-=ledacc[i][1];
+						if(realled[i][1]<color)
+							realled[i][1]=color;
+					}
+					else
+					{
+						realled[i][1]+=ledacc[i][1];
+						if(realled[i][1]>=255)
+						{
+							realled[i][1]=realled[i][1]-255;
+							if(realled[i][1]>color)
+								realled[i][1]=color;
+						}
+						
+					}
+			}
+			
+		}
+		leds[i]=CHSV(int(realled[i][1]),255,int(realled[i][0]));
+	}	
+	FastLED.show(); 
+}
+ISR(PCINT0_vect)//
+{
+        irCount++;
+}
 //接近传感器
 int getSwitch()
 {
@@ -364,31 +572,36 @@ int getSwitch()
 	else return 0;
 }
 //巡线传感器
-uint8_t getIR(int black)
-{
-	uint8_t form=0;
-	if(analogRead(RIGHT2)>=blackVal)
+uint8_t readIR(uint8_t seek=0)
+{	
+	int differvalue=500;//差值阈值，可用作排除干扰
+	static int white=0;
+	static uint8_t form=0;
+	if(seek==1)//重载空白值
+		white=analogRead(MID);
+	if(abs(white-analogRead(RIGHT2))>=differvalue)
 		form|=0x01;
 	else
 		form&=~0x01;
-	if(analogRead(RIGHT1)>=blackVal)
+	if(abs(white-analogRead(RIGHT1))>=differvalue)
 		form|=0x02;
 	else
 		form&=~0x02;
-	if(analogRead(MID)>=blackVal)
+	if(abs(white-analogRead(MID))>=differvalue)
 		form|=0x04;
 	else
 		form&=~0x04;
-	if(analogRead(LEFT1)>=blackVal)
+	if(abs(white-analogRead(LEFT1))>=differvalue)
 		form|=0x08;
 	else
 		form&=~0x08;
-	if(analogRead(LEFT2)>=blackVal)
+	if(abs(white-analogRead(LEFT2))>=differvalue)
 		form|=0x10;
 	else
 		form&=~0x10;
-	return form;		
+	return form;
 }
+
 //mp3播放or停止
 void mp3(int ranking,int val)
 {
@@ -401,20 +614,15 @@ void mp3(int ranking,int val)
 }
 void setup() {
   // put your setup code here, to run once:
+  
         pinInit();
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  /*
-   if(Cmd.check()==1)
-    Command();
-	mp3(1,15);
-	delay(3000);
-	mp3(0,15);
-	delay(3000);	*/
-        mp3(4,15);
-        delay(3000);
-        mp3(0,15);
-	delay (3000);
+  if(!getSwitch())
+  Move(255,0,0);
+  else
+  Move(0,0,0);
+  delay(20);
 }
